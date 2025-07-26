@@ -5,7 +5,7 @@ from modules.product.entity import Product
 from modules.product.schema import ProductSchema
 from modules.product.middleware import data_validation
 
-from modules.product.services import query_products_price_quantity_service, average_product_price_service, get_max_and_min_price_service, get_total_number_of_products_per_category_service, get_out_of_stock_items_service, get_top_5_expensive_items_service, get_items_within_price_range_service, get_products_added_in_the_last_n_days_service, update_product_category_service, batch_translate_service, similarity_search_service, batch_embedding_product_service
+from modules.product.services import query_products_price_quantity_service, average_product_price_service, get_max_and_min_price_service, get_total_number_of_products_per_category_service, get_out_of_stock_items_service, get_top_5_expensive_items_service, get_items_within_price_range_service, get_products_added_in_the_last_n_days_service, update_product_category_service, batch_translate_service, semantic_search_service, batch_embedding_product_service
 
 # Initialize the ProductSchema
 product_schema = ProductSchema()
@@ -322,12 +322,15 @@ def embed_products():
     
 def semantic_search():
     try:
+        query_text = request.args.get('query')
+        if not query_text:
+            return jsonify({'message': 'query text required'})
         
-        similarity_search_service()
+        response = semantic_search_service(query_text)
         
         
         return jsonify({
-            'message': 'success',
+            'message': response,
             # 'translated_product_info': translated_product_info
         }), 200
         

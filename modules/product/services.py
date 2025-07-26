@@ -8,6 +8,7 @@ import json
 import os
 import logging
 from extensions import db
+import numpy as np
 from modules.product.schema import ProductSchema
 
 load_dotenv()
@@ -246,7 +247,7 @@ def get_embedding(text):
         accept="application/json"
     )
     result = json.loads(response['body'].read())
-    logger.info(f"\n\n===== Embedding Response =====\n\n{result}")
+    # logger.info(f"\n\n===== Embedding Response =====\n\n{result}")
     return result['embedding']
 
 
@@ -271,16 +272,63 @@ def batch_embedding_product_service():
         logger.error(f"\n\n======== Error with batch embedding ========\n{str(e)}\n\n")
         raise
 
+# def cosine_distance(vector1, vector2):
+#     """
+#     Calculate cosine distance between two vectors
+#     Cosine distance = 1 - cosine similarity
+#     Range: 0 (identical) to 2 (opposite)
+#     """
+#     # Convert to numpy arrays
+#     v1 = np.array(vector1)
+#     v2 = np.array(vector2)
     
-def similarity_search_service():
+#     # Calculate dot product
+#     dot_product = np.dot(v1, v2)
+    
+#     # Calculate magnitudes
+#     magnitude1 = np.linalg.norm(v1)
+#     magnitude2 = np.linalg.norm(v2)
+    
+#     # Calculate cosine similarity
+#     cosine_similarity = dot_product / (magnitude1 * magnitude2)
+    
+#     # Convert to cosine distance
+#     cosine_distance = 1 - cosine_similarity
+    
+#     return cosine_distance
+    
+def semantic_search_service(query_text):
     try:
+        query_vector = get_embedding(query_text)
+        logger.info(f"\n\n===== Search Vector =====\n\n{query_vector[:100]}")
         
-        product = Product.query.get(1)
+        query = Product.query.filter((Product.embedding.isnot(None)) & (Product.in_stock == True))
+        logger.info(f"\n\n===== ORM Query =====\n\n{query}")
         
-        if not product:
-            return "Product doesn't exist", 400
+        # Implement cosine similarity using pgvector
+        results = query.order_by(Product.embedding.cosine_distance(query_vector)).limit(30).all()
+        logger.info(f"\n\n===== Cosine query result =====\n\n{results}")
         
-        embed_product(product)
+        # Format results with similarity scores
+        search_results = []
+        for product in results:
+            # Calculate the actual distance for this product
+            distance = db.session.query(Product.embedding.cosine_distance(query_vector)).filter(
+                Product.id == product.id
+            ).scalar()
+            
+            search_results.append({
+                'id': product.id,
+                'name': product.name,
+                'description': product.description,
+                'category': product.category,
+                'price': product.price,
+                'distance': float(distance),
+                'similarity_score': 1 - float(distance)  # Convert distance to similarity
+            })
+        
+        logger.info(f"\n\n===== Search Results =====\n\n{search_results}")
+        return search_results
         
     
     except Exception as e:
