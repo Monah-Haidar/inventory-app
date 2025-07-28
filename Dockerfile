@@ -5,6 +5,5 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 USER app
 COPY . .
-ENV API_URL=http://api.myapp.com/
 EXPOSE 5000
 CMD ["python", "app.py"]

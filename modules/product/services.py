@@ -1,3 +1,4 @@
+from flask import jsonify
 from sqlalchemy import func
 from modules.product.entity import Product
 from datetime import datetime, timedelta
@@ -5,6 +6,7 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 import boto3
 import json
+import io
 import os
 import logging
 from extensions import db
@@ -21,84 +23,8 @@ products_schema = ProductSchema(many=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def query_products_price_quantity_service():
-    return Product.query.with_entities(Product.price, Product.quantity).all()
-
-def average_product_price_service():
-    price_quantity = query_products_price_quantity_service()
-    total_value = sum(price * quantity for price, quantity in price_quantity)
-    total_products = sum(quantity for _, quantity in price_quantity)
-    
-    if total_products == 0:
-        return 0
-    
-    average_price = total_value / total_products
-    
-    return round(average_price, 2)
 
 
-def get_max_and_min_price_service():
-    price= Product.query.with_entities(Product.price).all()
-    
-    if not price:
-        return None, None
-    
-    max_price = max(price for price, in price);
-    min_price = min(price for price, in price);
-    
-    return max_price, min_price
-
-
-def get_total_number_of_products_per_category_service():
-    categories = Product.query.with_entities(Product.category, func.count(Product.id)).group_by(Product.category).all()
-    
-    total_value = {category: count for category, count in categories}
-
-    return total_value
-
-
-def get_out_of_stock_items_service():
-    out_of_stock_items = Product.query.filter(Product.in_stock == 0).all()
-    
-    if not out_of_stock_items:
-        return 0
-    
-    out_of_stock_data = [{'id': item.id, 'name': item.name, 'category': item.category} for item in out_of_stock_items]
-    
-    return out_of_stock_data
-
-
-def get_top_5_expensive_items_service():
-    top_items = Product.query.order_by(Product.price.desc()).limit(5).all()
-    
-    if not top_items:
-        return []
-    
-    top_items_data = [{'id': item.id, 'name': item.name, 'price': item.price} for item in top_items]
-    
-    return top_items_data
-
-
-def get_items_within_price_range_service(min_price, max_price):
-    items = Product.query.filter(Product.price.between(min_price, max_price)).all()
-    
-    if not items:
-        return []
-    
-    items_data = [{'id': item.id, 'name': item.name, 'price': item.price} for item in items]
-    
-    return items_data
-
-
-def get_products_added_in_the_last_n_days_service(nb):
-    cutoff = datetime.utcnow() - timedelta(days=nb)
-
-    items = Product.query.filter(Product.created_at >= cutoff).all()
-
-    if not items:
-        return []
-    
-    return [{'id': item.id, 'name': item.name, 'category': item.category, 'created_at': item.created_at} for item in items]
 
 
 def invoke_model_with_request(prompt):
@@ -110,7 +36,7 @@ def invoke_model_with_request(prompt):
             logger.error(f"Error creating Bedrock client: {e}")
             raise
         
-        logger.info(f"====== Invoking model with prompt ======= \n {prompt}")
+        logger.info(f"\n\n====== Invoking model with prompt ======= \n {prompt}\n\n")
         # v3.5 Sonnet model
         model_id = 'anthropic.claude-3-5-sonnet-20240620-v1:0'
         logger.info(f"Using model ID: {model_id}")
@@ -128,17 +54,17 @@ def invoke_model_with_request(prompt):
                 }
             ],
         }
-        logger.info(f"Native request for model invocation: {native_request}")
+        logger.info(f"\n\nNative request for model invocation\n\n{native_request}\n\n")
         
         request = json.dumps(native_request)
-        logger.info(f"Request to invoke model: {request}")
+        logger.info(f"\n\nRequest to invoke model\n\n{request}\n\n")
         
         try:
             response = client.invoke_model(modelId=model_id, body=request)
         except Exception as e:
-            logger.error(f"Error invoking model: {e}")
+            logger.error(f"\n\nError invoking model:\n\n{e}\n\n")
             raise
-        logger.info(f"====== Response from model ======= \n {model_id}: {response}")
+        logger.info(f"\n\n====== Response from model ======= \n {model_id}: {response}\n\n")
         
         model_response = json.loads(response["body"].read())
 
@@ -272,31 +198,7 @@ def batch_embedding_product_service():
         logger.error(f"\n\n======== Error with batch embedding ========\n{str(e)}\n\n")
         raise
 
-# def cosine_distance(vector1, vector2):
-#     """
-#     Calculate cosine distance between two vectors
-#     Cosine distance = 1 - cosine similarity
-#     Range: 0 (identical) to 2 (opposite)
-#     """
-#     # Convert to numpy arrays
-#     v1 = np.array(vector1)
-#     v2 = np.array(vector2)
-    
-#     # Calculate dot product
-#     dot_product = np.dot(v1, v2)
-    
-#     # Calculate magnitudes
-#     magnitude1 = np.linalg.norm(v1)
-#     magnitude2 = np.linalg.norm(v2)
-    
-#     # Calculate cosine similarity
-#     cosine_similarity = dot_product / (magnitude1 * magnitude2)
-    
-#     # Convert to cosine distance
-#     cosine_distance = 1 - cosine_similarity
-    
-#     return cosine_distance
-    
+   
 def semantic_search_service(query_text):
     try:
         query_vector = get_embedding(query_text)
@@ -336,3 +238,151 @@ def semantic_search_service(query_text):
         raise
     
     
+    
+# from urllib.parse import urlparse, unquote
+
+# def parse_s3_url(s3_url):
+#     """
+#     Parse an S3 URL into bucket and key.
+#     Supports virtual-hosted-style URLs including regional endpoints.
+#     """
+#     parsed = urlparse(s3_url)
+    
+#     if not parsed.netloc.endswith('amazonaws.com'):
+#         raise ValueError("Invalid S3 URL format")
+    
+#     # URL decode the path to handle spaces and special characters
+#     decoded_path = unquote(parsed.path)
+#     host_parts = parsed.netloc.split('.')
+    
+#     # Handle regional endpoints: bucket-name.s3.region.amazonaws.com
+#     if len(host_parts) > 4 and host_parts[1] == 's3':
+#         bucket = host_parts[0]
+#         key = parsed.path.lstrip('/')
+#         return bucket, unquote(key)
+#     # Handle path-style URLs: s3.amazonaws.com/bucket-name/key
+#     elif host_parts[0] == 's3':
+#         parts = parsed.path.lstrip('/').split('/', 1)
+#         if len(parts) != 2:
+#             raise ValueError("Invalid S3 path format")
+#         bucket = parts[0]
+#         key = parts[1]
+#         return bucket, unquote(key)
+#     # Handle legacy style: bucket-name.s3.amazonaws.com/key
+#     else:
+#         bucket = host_parts[0]
+#         key = parsed.path.lstrip('/')
+#         return bucket, unquote(key)
+
+    
+
+
+s3 = boto3.client('s3', region_name='us-east-1')
+
+def read_file_from_s3(s3_path):
+    try:
+        # https://zeroandone-inventory-app-bucket.s3.us-east-1.amazonaws.com/Chapter+1+(Databases+and+Database+Users).pdf
+        # https://zeroandone-inventory-app-bucket.s3.us-east-1.amazonaws.com/Mini_Inventory_Management_System.docx
+        # https://zeroandone-inventory-app-bucket.s3.us-east-1.amazonaws.com/5-+Multi-containers+apps.pdf
+        # https://zeroandone-inventory-app-bucket.s3.us-east-1.amazonaws.com/Module+6+-+Storage.md
+        bucket_name = 'zeroandone-inventory-app-bucket'
+        object_key = 'Screenshot 2025-07-28 234043.png'
+        # bucket_name, object_key = parse_s3_url(s3_path)
+        logger.info(f"\n\n======== Bucket, Key 1 ======== \n{bucket_name, object_key}\n\n")
+        
+        # Check if bucket exists first
+        try:
+            s3.head_bucket(Bucket=bucket_name)
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == '404' or error_code == '403':
+                logger.error(f"\n\n======== Bucket {bucket_name} does not exist or you don't have access to it ========\n\n")
+                raise ValueError(f"Bucket '{bucket_name}' does not exist or you don't have access to it")
+            raise
+
+        # Try to get the object
+        try:
+            response = s3.get_object(Bucket=bucket_name, Key=object_key)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                logger.error(f"\n\n======== Object {object_key} does not exist in bucket {bucket_name} ========\n\n")
+                raise ValueError(f"Object '{object_key}' does not exist in bucket '{bucket_name}'")
+            raise
+
+        file_bytes = response['Body'].read()
+        logger.info(f"\n\n======== file_bytes ======== \n{file_bytes[:500]}\n\n")
+        
+        return file_bytes
+        
+    except ValueError as e:
+        logger.error(f"\n\n======== S3 Access Error ========\n{str(e)}\n\n")
+        raise
+    except Exception as e:
+        logger.error(f"\n\n======== Unexpected Error ========\n{str(e)}\n\n")
+        raise
+
+
+
+textract = boto3.client('textract')
+
+def extract_text_with_textract(file_bytes):
+    
+    try:
+        # response = textract.analyze_document(
+        #     Document={'Bytes': file_bytes},
+        #     FeatureTypes=['FORMS', 'TABLES']
+        # )
+        response = textract.detect_document_text(
+            Document={'Bytes': file_bytes},
+            # FeatureTypes=['FORMS', 'TABLES', '']
+        )
+    except Exception as e:
+        logger.error(f"\n\n======== extract_text_with_textract service Error ========\n{str(e)}\n\n")
+        raise
+    
+    
+    text_chunks = []
+    for block in response['Blocks']:
+        if block['BlockType'] == 'LINE':
+            text_chunks.append(block['Text'])
+            
+    logger.info(f"\n\n======== text_chunks ======== \n{text_chunks}\n\n")
+
+    full_text = "\n".join(text_chunks)
+    logger.info(f"\n\n======== full_text ======== \n{full_text}\n\n")
+
+    return full_text
+
+
+
+# bedrock = boto3.client('bedrock-runtime')
+
+def structure_with_bedrock(text):
+    prompt = f"""
+    Given the following document text, extract structured data into a JSON format:
+
+    -----
+    {text}
+    -----
+
+    Return a well-formatted JSON.
+    """
+
+    response = invoke_model_with_request(prompt)
+    logger.info(f"\n=============== GOT PAST RESPONSE ===============\n")
+    result = response['body']
+    logger.info(f"\n=============== RESULT ===============\n {result}")
+    return result
+
+
+
+
+def handle_document_from_s3(s3_path):
+    file_name = s3_path.split('/')[-1]
+    file_bytes = read_file_from_s3(s3_path)
+    
+    text = extract_text_with_textract(file_bytes)
+    structured_output = structure_with_bedrock(text)
+    
+    return structured_output
+    # return process_with_bedrock(file_bytes, file_name)
