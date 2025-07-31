@@ -1,14 +1,8 @@
-from flask import jsonify
-from sqlalchemy import func
 from modules.product.entity import Product
-from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
-import boto3
 import json
-import logging
 from extensions import db, get_logger
-import numpy as np
 from modules.product.schema import ProductSchema
 from modules.shared.services.bedrock import BedrockService
 from modules.shared.services.translate import TranslateService
@@ -17,14 +11,6 @@ from modules.shared.services.s3 import S3Service
 # from modules.shared.services.bedrock.service import bedrock_service
 
    
-
-textract = boto3.client('textract')
-# bedrock = boto3.client('bedrock-runtime')
-
-
-
-
-
 
 class ProductService:
     def __init__(self):
@@ -146,7 +132,7 @@ class ProductService:
                 raise ValueError("Invalid S3 path. Must be in format 'bucket/key/to/file'.")
             
             bucket_name, object_key = parts
-
+            
             self.logger.info(f"[DocumentProcessing] Downloading from S3: bucket={bucket_name}, key={object_key}")
             file_bytes = self.s3_service.read_file_from_s3(bucket_name, object_key)
 

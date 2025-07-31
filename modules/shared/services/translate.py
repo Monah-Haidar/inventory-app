@@ -1,5 +1,4 @@
 import boto3
-import logging
 from dotenv import load_dotenv
 
 from extensions import get_logger
