@@ -70,11 +70,6 @@ class BedrockService:
         return result['embedding']
     
     def extract_text_from_document(self, file_bytes):
-        """
-        Extract text from document bytes using Anthropic Claude 3.5 Sonnet on Bedrock.
-        The document is sent as a base64-encoded string in the prompt.
-        Returns the extracted text as a string.
-        """
         import base64
         try:
             self.logger.info("[Bedrock] extract_text_from_document called. Sending document bytes to Claude 3.5 Sonnet model.")
